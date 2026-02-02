@@ -1,0 +1,3 @@
+[submodule "app/src/main/cpp/Acoustic-DSP-Core"]
+	path = app/src/main/cpp/Acoustic-DSP-Core
+	url = git@github.com:charlescao460/Acoustic-DSP-Core.git
