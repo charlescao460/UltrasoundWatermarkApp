@@ -57,4 +57,10 @@ namespace ase_ultrasound_watermark
         converter_->detachAllConsumers();
         is_running_ = false;
     }
+
+    void WatermarkCallee::SetOnWatermarkResultsCallback(std::function<void(float, float)> callback)
+    {
+        std::lock_guard lock{state_mutex_};
+        detector_->setCallback(callback);
+    }
 } // ase_ultrasound_watermark

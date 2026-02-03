@@ -20,6 +20,11 @@ namespace ase_ultrasound_watermark
 
         void StartServer(int play_device_id);
 
+        /// Set callback when the watermark detection result is available
+        /// \param callback first float is watermarking probability of current window (instantaneous probability),
+        /// second float is probability of current frame (Overall average)
+        void SetOnWatermarkResultsCallback(std::function<void(float, float)> callback);
+
         void Stop();
 
     private:
