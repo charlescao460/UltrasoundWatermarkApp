@@ -33,6 +33,7 @@ namespace ase_ultrasound_watermark
         std::shared_ptr<ase_android::OboeStreamConsumerPlayer<int16_t>> player_;
         std::shared_ptr<WatermarkDetector> detector_;
         std::shared_ptr<ase::FormatConversionStream<int16_t, float>> converter_;
+        std::shared_ptr<ase::FlexibleSizeStreamProducer<int16_t>> flex_sizer_;
         std::shared_ptr<KcpServerStreamProducer> server_;
 
     };

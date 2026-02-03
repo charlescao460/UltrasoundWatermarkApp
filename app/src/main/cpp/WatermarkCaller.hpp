@@ -25,7 +25,7 @@ namespace ase_ultrasound_watermark
     private:
         constexpr static std::array<int, 6> MULTI_TONE = {16000, 16300, 16600, 16900, 17200, 17500};
         constexpr static float PROBING_SIGNAL_AMP = 0.8;
-        constexpr static float PROBING_SIGNAL_DURATION_S = 120;
+        constexpr static float PROBING_SIGNAL_DURATION_S = 20;
 
         bool is_running_;
         std::mutex state_mutex_;

@@ -54,7 +54,7 @@ namespace ase_ultrasound_watermark
         if (player_ == nullptr || player_->getDeviceId() != play_device_id)
         {
             player_ = std::make_shared<OboeLoopPlayer<int16_t>>(play_device_id, WatermarkGenerator::INPUT_FS, 1,
-                                                                oboe::PerformanceMode::PowerSavingOffloaded, WatermarkGenerator::INPUT_FS / 2);
+                                                                oboe::PerformanceMode::None, WatermarkGenerator::INPUT_FS / 2);
             const auto multi_tone_samples = static_cast<size_t>(PROBING_SIGNAL_DURATION_S * WatermarkGenerator::INPUT_FS);
             auto multi_tone = generateMultiTone(multi_tone_samples, WatermarkGenerator::INPUT_FS, MULTI_TONE, PROBING_SIGNAL_AMP);
             player_->setBuffer(std::move(multi_tone), multi_tone_samples);
