@@ -11,22 +11,6 @@ using namespace ase_android;
 
 namespace ase_ultrasound_watermark
 {
-    template<size_t NUM_TONES>
-    requires (NUM_TONES >= 1)
-    ase::aligned_unique_ptr<int16_t[]> generateMultiTone(const size_t size, const int fs, const std::array<int, NUM_TONES> &freqs, const float final_amplitude)
-    {
-        const auto amplitude = 1.0 / NUM_TONES * 0.99;
-        auto buffer = WaveformGenerator<float>::sine(size, fs, 0.0, freqs[0], amplitude);
-        auto buffer_ref = kfr::make_univector(buffer.get(), size);
-        for (size_t i = 1; i < NUM_TONES; ++i)
-        {
-            auto tone = WaveformGenerator<float>::sine(size, fs, 0.0, freqs[i], amplitude);
-            buffer_ref = kfr::make_univector(tone.get(), size) + buffer_ref;
-        }
-        buffer_ref = buffer_ref * final_amplitude;
-        return convertBufferFormat<int16_t, float>(buffer.get(), size);
-    }
-
     WatermarkCaller::WatermarkCaller(const std::filesystem::path &param_path,
                                      const std::filesystem::path &model_path)
             : is_running_{false}
@@ -36,7 +20,7 @@ namespace ase_ultrasound_watermark
         converter_out_ = std::make_shared<FormatConversionStream<float, int16_t>>(WatermarkGenerator::OUTPUT_FS, 1);
     }
 
-    void WatermarkCaller::StartCall(std::string &host, int play_device_id, int record_device_id)
+    void WatermarkCaller::StartCall(std::string &host, int play_device_id, int record_device_id, const std::filesystem::path &signal_path)
     {
         if (!state_mutex_.try_lock())
         {
@@ -55,9 +39,6 @@ namespace ase_ultrasound_watermark
         {
             player_ = std::make_shared<OboeLoopPlayer<int16_t>>(play_device_id, WatermarkGenerator::INPUT_FS, 1,
                                                                 oboe::PerformanceMode::None, WatermarkGenerator::INPUT_FS / 2);
-            const auto multi_tone_samples = static_cast<size_t>(PROBING_SIGNAL_DURATION_S * WatermarkGenerator::INPUT_FS);
-            auto multi_tone = generateMultiTone(multi_tone_samples, WatermarkGenerator::INPUT_FS, MULTI_TONE, PROBING_SIGNAL_AMP);
-            player_->setBuffer(std::move(multi_tone), multi_tone_samples);
         }
         if (recorder_ == nullptr || recorder_->getDeviceId() != record_device_id)
         {
@@ -68,8 +49,14 @@ namespace ase_ultrasound_watermark
         converter_in_->attachConsumer(generator_);
         generator_->attachConsumer(converter_out_);
         converter_out_->attachConsumer(kcp_client_);
+        // Read signal from file
+        int fs = 0;
+        int ch = 0;
+        size_t player_buffer_len = 0;
+        auto play_buffer = readBufferFromWavFile<int16_t>(signal_path, fs, ch, player_buffer_len);
         // Start
         player_->start();
+        player_->setBuffer(std::move(play_buffer), player_buffer_len);
         recorder_->start();
         is_running_ = true;
     }

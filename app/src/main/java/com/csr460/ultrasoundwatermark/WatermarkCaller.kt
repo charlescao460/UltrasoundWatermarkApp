@@ -7,8 +7,8 @@ class WatermarkCaller(paramPath: String, modelPath: String) {
         nativePtr = nativeCreate(paramPath, modelPath)
     }
 
-    fun startCall(host: String, playDeviceId: Int, recordDeviceId: Int) {
-        nativeStartCall(nativePtr, host, playDeviceId, recordDeviceId)
+    fun startCall(host: String, playDeviceId: Int, recordDeviceId: Int, signalPath: String) {
+        nativeStartCall(nativePtr, host, playDeviceId, recordDeviceId, signalPath)
     }
 
     fun stopCall() {
@@ -21,7 +21,7 @@ class WatermarkCaller(paramPath: String, modelPath: String) {
     }
 
     private external fun nativeCreate(paramPath: String, modelPath: String): Long
-    private external fun nativeStartCall(nativePtr: Long, host: String, playDeviceId: Int, recordDeviceId: Int)
+    private external fun nativeStartCall(nativePtr: Long, host: String, playDeviceId: Int, recordDeviceId: Int, signalPath: String)
     private external fun nativeStopCall(nativePtr: Long)
     private external fun nativeDelete(nativePtr: Long)
 

@@ -13,13 +13,13 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 @RunWith(AndroidJUnit4::class)
 class UltrasoundWatermarkJniTest {
 
     @get:Rule
-    var permissionRule: GrantPermissionRule =
-        GrantPermissionRule.grant(Manifest.permission.RECORD_AUDIO)
+    var permissionRule: GrantPermissionRule = GrantPermissionRule.grant(Manifest.permission.RECORD_AUDIO)
 
     private fun copyRawResourceToFile(context: Context, resourceId: Int, file: File) {
         val inputStream: InputStream = context.resources.openRawResource(resourceId)
@@ -39,28 +39,28 @@ class UltrasoundWatermarkJniTest {
         val callerModelPath = File(context.cacheDir, "generator_bin").absolutePath
         val calleeParamPath = File(context.cacheDir, "detector_param").absolutePath
         val calleeModelPath = File(context.cacheDir, "detector_bin").absolutePath
+        val signalPath = File(context.cacheDir, "multitone.wav").absolutePath
 
         copyRawResourceToFile(context, R.raw.generator_param, File(callerParamPath))
         copyRawResourceToFile(context, R.raw.generator_bin, File(callerModelPath))
         copyRawResourceToFile(context, R.raw.detector_param, File(calleeParamPath))
         copyRawResourceToFile(context, R.raw.detector_bin, File(calleeModelPath))
+        copyRawResourceToFile(context, R.raw.multitone, File(signalPath))
 
         val caller = WatermarkCaller(callerParamPath, callerModelPath)
         val callee = WatermarkCallee(calleeParamPath, calleeModelPath)
 
         val latch = CountDownLatch(1)
-        var watermarkResultAvailable = false
 
         callee.setOnWatermarkResultsCallback { instantaneous, average ->
-            watermarkResultAvailable = true
             latch.countDown()
         }
 
         callee.startServer(0) // Default device
-        caller.startCall("localhost", 0, 0) // Default devices
+        caller.startCall("localhost", 0, 0, signalPath)
 
-        // Wait for a watermark to be detected
-        latch.await()
+        // Wait for 10 seconds for a callback
+        val callbackReceived = latch.await(60, TimeUnit.SECONDS)
 
         caller.stopCall()
         callee.stop()
@@ -68,6 +68,6 @@ class UltrasoundWatermarkJniTest {
         caller.release()
         callee.release()
 
-        assertTrue("Watermark should have been detected", watermarkResultAvailable)
+        assertTrue("Callback should have been received", callbackReceived)
     }
 }

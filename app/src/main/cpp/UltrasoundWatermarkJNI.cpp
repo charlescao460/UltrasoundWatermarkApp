@@ -34,15 +34,17 @@ Java_com_csr460_ultrasoundwatermark_WatermarkCaller_nativeCreate(JNIEnv *env, jo
 }
 
 JNIEXPORT void JNICALL
-Java_com_csr460_ultrasoundwatermark_WatermarkCaller_nativeStartCall(JNIEnv *env, jobject thiz, jlong native_ptr, jstring host, jint play_device_id, jint record_device_id)
+Java_com_csr460_ultrasoundwatermark_WatermarkCaller_nativeStartCall(JNIEnv *env, jobject thiz, jlong native_ptr, jstring host, jint play_device_id, jint record_device_id, jstring signal_path)
 {
     auto *caller = reinterpret_cast<ase_ultrasound_watermark::WatermarkCaller *>(native_ptr);
     if (caller)
     {
         const char *host_str = env->GetStringUTFChars(host, nullptr);
         std::string host_std_str = host_str;
-        caller->StartCall(host_std_str, play_device_id, record_device_id);
+        const char *signal_path_str = env->GetStringUTFChars(signal_path, nullptr);
+        caller->StartCall(host_std_str, play_device_id, record_device_id, signal_path_str);
         env->ReleaseStringUTFChars(host, host_str);
+        env->ReleaseStringUTFChars(signal_path, signal_path_str);
     }
 }
 

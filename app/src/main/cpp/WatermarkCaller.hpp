@@ -18,14 +18,12 @@ namespace ase_ultrasound_watermark
     public:
         WatermarkCaller(const std::filesystem::path &param_path, const std::filesystem::path &model_path);
 
-        void StartCall(std::string &host, int play_device_id, int record_device_id);
+        void StartCall(std::string &host, int play_device_id, int record_device_id, const std::filesystem::path &signal_path);
 
         void StopCall();
 
     private:
         constexpr static std::array<int, 6> MULTI_TONE = {16000, 16300, 16600, 16900, 17200, 17500};
-        constexpr static float PROBING_SIGNAL_AMP = 0.8;
-        constexpr static float PROBING_SIGNAL_DURATION_S = 20;
 
         bool is_running_;
         std::mutex state_mutex_;
