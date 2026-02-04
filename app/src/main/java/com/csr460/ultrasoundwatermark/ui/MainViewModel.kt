@@ -58,10 +58,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val lastVersionCode = getAppLastVersionCode(context)
         val currentVersionCode = getAppCurrentVersionCode(context)
 
-        if (lastVersionCode != currentVersionCode) {
-            copyRawResources(context)
-            setAppLastVersionCode(context, currentVersionCode)
-        }
+
+        copyRawResources(context)
+        setAppLastVersionCode(context, currentVersionCode)
+
 
         val callerParamPath = File(context.cacheDir, "generator_param").absolutePath
         val callerModelPath = File(context.cacheDir, "generator_bin").absolutePath
@@ -226,7 +226,7 @@ data class CalleeScreenState(
     val ipv6Address: String = "",
     val instantaneousProbability: Float = 0.0f,
     val averageProbability: Float = 0.0f,
-    val probabilityThreshold: Float = 0.5f
+    val probabilityThreshold: Float = 0.2f
 )
 
 data class CallerScreenState(
