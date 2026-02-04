@@ -14,7 +14,7 @@ namespace ase_ultrasound_watermark
     {
         detector_ = std::make_shared<WatermarkDetector>(param_path, model_path);
         converter_ = std::make_shared<FormatConversionStream<int16_t, float>>(WatermarkDetector::INPUT_FS, 1);
-        flex_sizer_ = std::make_shared<FlexibleSizeStreamProducer<int16_t>>(WatermarkDetector::INPUT_FS, 1, WatermarkDetector::WINDOW_STEP, 16);
+        model_flex_sizer_ = std::make_shared<FlexibleSizeStreamProducer<int16_t>>(WatermarkDetector::INPUT_FS, 1, WatermarkDetector::WINDOW_STEP, 16);
     }
 
     void WatermarkCallee::StartServer(int play_device_id)
@@ -29,16 +29,20 @@ namespace ase_ultrasound_watermark
             return;
         }
         server_ = std::make_shared<KcpServerStreamProducer>(WatermarkDetector::INPUT_FS, KcpServerStreamProducer::L3_MTU / sizeof(float) + 1, 32);
-        if (player_ == nullptr || player_->getDeviceId() != play_device_id)
-        {
-            player_ = std::make_shared<OboeStreamConsumerPlayer<int16_t>>(play_device_id, WatermarkDetector::INPUT_FS, 1, oboe::PerformanceMode::LowLatency, WatermarkDetector::WINDOW_STEP,
-                                                                          WatermarkDetector::WINDOW_STEP * 16);
-            player_->start();
-        }
+
+        player_ = std::make_shared<OboeStreamConsumerPlayer<int16_t>>(
+                play_device_id,
+                WatermarkDetector::INPUT_FS,
+                1,
+                oboe::PerformanceMode::LowLatency,
+                PLAYER_CALLBACK_SIZE,
+                PLAYER_CALLBACK_BUFFER_SIZE
+        );
+        player_->start();
         // Connect everything
         server_->attachConsumer(player_);
-        server_->attachConsumer(flex_sizer_);
-        flex_sizer_->attachConsumer(converter_);
+        server_->attachConsumer(model_flex_sizer_);
+        model_flex_sizer_->attachConsumer(converter_);
         converter_->attachConsumer(detector_);
         is_running_ = true;
     }
@@ -56,7 +60,8 @@ namespace ase_ultrasound_watermark
         }
         player_->stop();
         server_.reset();
-        flex_sizer_->detachAllConsumers();
+        player_.reset();
+        model_flex_sizer_->detachAllConsumers();
         converter_->detachAllConsumers();
         is_running_ = false;
     }

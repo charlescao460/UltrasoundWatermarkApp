@@ -5,6 +5,7 @@
 #ifndef ULTRASOUNDWATERMARK_OBOESTREAMCONSUMERPLAYER_HPP
 #define ULTRASOUNDWATERMARK_OBOESTREAMCONSUMERPLAYER_HPP
 
+#include <readerwriterqueue.h>
 #include <ase/stream/AudioDataStreamBase.hpp>
 #include "OboePlayerBase.hpp"
 
@@ -15,8 +16,14 @@ namespace ase_android
     class OboeStreamConsumerPlayer : public OboePlayerBase<SAMPLE_T>, public ase::AudioDataStreamBase<SAMPLE_T>
     {
         using oboeBase = OboePlayerBase<SAMPLE_T>;
+
     public:
-        OboeStreamConsumerPlayer(int32_t device, int32_t sample_rate, int32_t channels, oboe::PerformanceMode mode, int32_t callback_samples, int32_t buffer_samples)
+        OboeStreamConsumerPlayer(int32_t device,
+                                 int32_t sample_rate,
+                                 int32_t channels,
+                                 oboe::PerformanceMode mode,
+                                 int32_t callback_samples,
+                                 int32_t buffer_samples)
                 : OboePlayerBase<SAMPLE_T>{device, sample_rate, channels, mode, callback_samples},
                   ase::AudioDataStreamBase<SAMPLE_T>{sample_rate, channels},
                   input_buffer_{static_cast<size_t>(buffer_samples)},
@@ -26,37 +33,38 @@ namespace ase_android
         {
         }
 
-        void consume(const SAMPLE_T *samples, size_t size) override
+        void consume(const SAMPLE_T *samples, size_t size /* size is in SAMPLES */) override
         {
+            if (samples == nullptr || size == 0) return;
+
             if (!oboeBase::isRunning())
             {
                 return;
             }
-            std::lock_guard lock{spin_lock_};
-            if (unlikely(!input_buffer_) || unlikely(input_buffer_samples_ == 0) || unlikely(samples == nullptr) || unlikely(size == 0))
-            {
-                return;
-            }
 
-            // If producer pushes more than capacity, keep the most recent tail.
+            std::lock_guard lock{spin_lock_};
+            if (unlikely(!input_buffer_) || input_buffer_samples_ == 0) return;
+
+            // If incoming chunk larger than capacity, keep the newest tail.
             if (size > input_buffer_samples_)
             {
                 samples += (size - input_buffer_samples_);
                 size = input_buffer_samples_;
             }
 
-            // Ensure there is room; if not, drop the oldest samples (advance read).
-            const size_t available = write_position_samples - read_position_samples_;
             const size_t capacity = input_buffer_samples_;
+            const size_t available = write_position_samples - read_position_samples_;
+
+            // Overflow policy: drop oldest to make room (low latency).
             if (available + size > capacity)
             {
                 const size_t to_drop = (available + size) - capacity;
                 read_position_samples_ += to_drop;
             }
 
-            // Write into ring buffer with wrap.
-            size_t w = write_position_samples % input_buffer_samples_;
-            const size_t first = std::min(size, input_buffer_samples_ - w);
+            // Write into ring using modulo indexing.
+            size_t w = write_position_samples % capacity;
+            const size_t first = std::min(size, capacity - w);
             std::memcpy(input_buffer_.get() + w, samples, first * sizeof(SAMPLE_T));
             if (size > first)
             {
@@ -64,7 +72,6 @@ namespace ase_android
             }
 
             write_position_samples += size;
-
         }
 
         ~OboeStreamConsumerPlayer()
@@ -75,7 +82,6 @@ namespace ase_android
             write_position_samples = 0;
         }
 
-
     protected:
         ase::aligned_unique_ptr<SAMPLE_T[]> input_buffer_;
         const size_t input_buffer_samples_;
@@ -83,31 +89,35 @@ namespace ase_android
         size_t read_position_samples_;
         size_t write_position_samples;
 
+        // Append N zeros into ring and advance write_position_samples.
+        // Keeps monotonic positions, applies same overflow policy (drop oldest).
         void appendZerosLocked(size_t n)
         {
-            if (unlikely(n == 0) || unlikely(!input_buffer_) || unlikely(input_buffer_samples_) == 0)
+
+            if (unlikely(n == 0 || !input_buffer_ || input_buffer_samples_ == 0))
             {
                 return;
             }
 
-            // If n > capacity, only the last "capacity" zeros matter; equivalent effect is fine.
-            if (n > input_buffer_samples_)
+            const size_t capacity = input_buffer_samples_;
+
+            // If asked to append more than capacity, only the last 'capacity' zeros matter.
+            if (n > capacity)
             {
-                // Drop everything currently buffered; we'll effectively output all zeros anyway.
+                // Clear buffered history; we'll effectively output zeros anyway.
                 read_position_samples_ = write_position_samples;
-                n = input_buffer_samples_;
+                n = capacity;
             }
 
             const size_t available = write_position_samples - read_position_samples_;
-            const size_t capacity = input_buffer_samples_;
             if (available + n > capacity)
             {
                 const size_t to_drop = (available + n) - capacity;
                 read_position_samples_ += to_drop;
             }
 
-            size_t w = write_position_samples % input_buffer_samples_;
-            const size_t first = std::min(n, input_buffer_samples_ - w);
+            size_t w = write_position_samples % capacity;
+            const size_t first = std::min(n, capacity - w);
             std::memset(input_buffer_.get() + w, 0, first * sizeof(SAMPLE_T));
             if (n > first)
             {
@@ -120,34 +130,35 @@ namespace ase_android
         oboe::DataCallbackResult onAudioReady(oboe::AudioStream *audioStream, void *audioData, int32_t numFrames) override
         {
             std::lock_guard lock{spin_lock_};
-            if (unlikely(!input_buffer_) || unlikely(input_buffer_samples_) == 0 || unlikely(audioData == nullptr) || unlikely(numFrames <= 0))
+            if (unlikely(!input_buffer_ || input_buffer_samples_ == 0 || audioData == nullptr || numFrames <= 0))
             {
                 return oboe::DataCallbackResult::Stop;
             }
 
             auto *out = static_cast<SAMPLE_T *>(audioData);
-            const size_t required = static_cast<size_t>(numFrames) * static_cast<size_t>(oboeBase::_num_channels);
 
-            // If not enough buffered samples, write zeros into the ring and advance write_position_samples
-            // so that exactly "required" samples are available to copy out.
+            // Callback counts FRAMES; we need SAMPLES = frames * channels.
+            const size_t required_samples = static_cast<size_t>(numFrames) * static_cast<size_t>(oboeBase::_num_channels);
+
             const size_t available = write_position_samples - read_position_samples_;
-            if (available < required)
+            if (available < required_samples)
             {
-                appendZerosLocked(required - available);
+                appendZerosLocked(required_samples - available);
             }
 
-            // Copy "required" samples from ring at read_position_samples_ into out, with wrap.
-            size_t r = read_position_samples_ % input_buffer_samples_;
-            const size_t first = std::min(required, input_buffer_samples_ - r);
+            // Copy required_samples from ring at read_position_samples_ to output (wrap aware).
+            const size_t capacity = input_buffer_samples_;
+            size_t r = read_position_samples_ % capacity;
+            const size_t first = std::min(required_samples, capacity - r);
             std::memcpy(out, input_buffer_.get() + r, first * sizeof(SAMPLE_T));
-            if (required > first)
+            if (required_samples > first)
             {
-                std::memcpy(out + first, input_buffer_.get(), (required - first) * sizeof(SAMPLE_T));
+                std::memcpy(out + first, input_buffer_.get(), (required_samples - first) * sizeof(SAMPLE_T));
             }
 
-            read_position_samples_ += required;
+            read_position_samples_ += required_samples;
 
-            // Optional: prevent counters from growing unbounded when empty
+            // Optional reset when empty to avoid unbounded growth.
             if (read_position_samples_ == write_position_samples)
             {
                 read_position_samples_ = 0;

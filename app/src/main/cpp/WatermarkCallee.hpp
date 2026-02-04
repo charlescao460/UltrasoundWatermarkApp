@@ -16,6 +16,9 @@ namespace ase_ultrasound_watermark
     class WatermarkCallee
     {
     public:
+        constexpr static int PLAYER_CALLBACK_SIZE = 512;
+        constexpr static int PLAYER_CALLBACK_BUFFER_SIZE = 64 * PLAYER_CALLBACK_SIZE;
+
         WatermarkCallee(const std::filesystem::path &param_path, const std::filesystem::path &model_path);
 
         void StartServer(int play_device_id);
@@ -33,7 +36,7 @@ namespace ase_ultrasound_watermark
         std::shared_ptr<ase_android::OboeStreamConsumerPlayer<int16_t>> player_;
         std::shared_ptr<WatermarkDetector> detector_;
         std::shared_ptr<ase::FormatConversionStream<int16_t, float>> converter_;
-        std::shared_ptr<ase::FlexibleSizeStreamProducer<int16_t>> flex_sizer_;
+        std::shared_ptr<ase::FlexibleSizeStreamProducer<int16_t>> model_flex_sizer_;
         std::shared_ptr<KcpServerStreamProducer> server_;
 
     };
